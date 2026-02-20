@@ -35,7 +35,7 @@
 //   - `npm whoami` shows your username
 
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
-import { join, resolve, dirname } from 'node:path'
+import { join, resolve, dirname, basename } from 'node:path'
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -118,6 +118,7 @@ function main() {
   // ── Step 3: Rewrite package.json files ────────────────────────────────
   // Temporarily mutate each package.json for publishing. Changes:
   //   - "name" field: @tanstack/X → @klinking/X
+  //   - "repository.url": TanStack/pacer → dogmar/pacer (for provenance attestation)
   //   - Internal deps: "workspace:*" → "npm:@klinking/X@<exact-version>"
   //   - Internal peer deps with semver: ">=0.16.4" → "npm:@klinking/X@>=0.16.4"
   // External deps like @tanstack/store are NOT touched.
@@ -128,6 +129,14 @@ function main() {
 
     pkg.name = toKlinking(pkg.name)
     console.log(`\n${originalName} -> ${pkg.name}`)
+
+    if (pkg.repository?.url) {
+      pkg.repository.url = pkg.repository.url.replace(
+        'TanStack/pacer',
+        'dogmar/pacer',
+      )
+      console.log(`  repository.url -> ${pkg.repository.url}`)
+    }
 
     for (const depType of [
       'dependencies',
@@ -165,15 +174,22 @@ function main() {
 
   // ── Step 4: Publish ───────────────────────────────────────────────────
   // --access public: required for scoped packages on first publish
-  // --no-provenance: provenance requires GitHub Actions OIDC, skip for local publish
+  // --provenance: publish with provenance attestation (requires OIDC, i.e. GitHub Actions)
+  // In CI, npm auto-detects the OIDC token for trusted publishing — no .npmrc or NPM_TOKEN needed.
   console.log('\n=== Publishing packages ===')
-  const publishFlags = ['--access', 'public', '--no-provenance']
+  const inCI = Boolean(process.env.CI)
+  const publishFlags = ['--access', 'public']
+  if (inCI) {
+    publishFlags.push('--provenance')
+  } else {
+    publishFlags.push('--no-provenance')
+  }
   if (dryRun) publishFlags.push('--dry-run')
 
   // When --only is specified, only publish those package directories
   const publishPaths = onlyDirs
     ? packageJsonPaths.filter((p) => {
-        const dir = p.split('/').at(-2)
+        const dir = basename(dirname(p))
         return onlyDirs.has(dir)
       })
     : packageJsonPaths
@@ -182,14 +198,26 @@ function main() {
     console.log(`Filtering to: ${[...onlyDirs].join(', ')}`)
   }
 
+  let failures = 0
   for (const pkgPath of publishPaths) {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
     const pkgDir = dirname(pkgPath)
     console.log(`\nPublishing ${pkg.name}@${pkg.version}...`)
     try {
-      run(`npm publish ${publishFlags.join(' ')}`, { cwd: pkgDir })
+      const output = execSync(`npm publish ${publishFlags.join(' ')}`, {
+        cwd: pkgDir,
+        stdio: 'pipe',
+        encoding: 'utf-8',
+      })
+      if (output) console.log(output)
     } catch (e) {
-      console.error(`Failed to publish ${pkg.name}: ${e.message}`)
+      const stderr = e.stderr || e.message
+      if (dryRun && stderr.includes('previously published versions')) {
+        console.log(`  Already published (ok for dry-run)`)
+      } else {
+        console.error(`Failed to publish ${pkg.name}:\n${stderr}`)
+        failures++
+      }
     }
   }
 
@@ -198,6 +226,11 @@ function main() {
   // Source code was never modified — only package.json files were touched.
   console.log('\n=== Reverting changes ===')
   run('git checkout -- packages/')
+
+  if (failures > 0) {
+    console.error(`\n${failures} package(s) failed to publish`)
+    process.exit(1)
+  }
 
   console.log('\nDone!')
 }
