@@ -131,7 +131,10 @@ function main() {
     console.log(`\n${originalName} -> ${pkg.name}`)
 
     if (pkg.repository?.url) {
-      pkg.repository.url = pkg.repository.url.replace('TanStack/pacer', 'dogmar/pacer')
+      pkg.repository.url = pkg.repository.url.replace(
+        'TanStack/pacer',
+        'dogmar/pacer',
+      )
       console.log(`  repository.url -> ${pkg.repository.url}`)
     }
 
