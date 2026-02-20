@@ -26,7 +26,7 @@ jobs:
         uses: tanstack/config/.github/setup@main
 
       - name: Install latest npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11
 
       - name: Detect changed versions
         id: changes
@@ -62,4 +62,4 @@ jobs:
 
       - name: Publish changed packages
         if: steps.changes.outputs.has_changes == 'true'
-        run: node scripts/publish-fork.mjs --only ${{ steps.changes.outputs.changed }}
+        run: node scripts/publish-fork.mjs --only "${{ steps.changes.outputs.changed }}"

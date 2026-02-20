@@ -35,7 +35,7 @@
 //   - `npm whoami` shows your username
 
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
-import { join, resolve, dirname } from 'node:path'
+import { join, resolve, dirname, basename } from 'node:path'
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -118,6 +118,7 @@ function main() {
   // ── Step 3: Rewrite package.json files ────────────────────────────────
   // Temporarily mutate each package.json for publishing. Changes:
   //   - "name" field: @tanstack/X → @klinking/X
+  //   - "repository.url": TanStack/pacer → dogmar/pacer (for provenance attestation)
   //   - Internal deps: "workspace:*" → "npm:@klinking/X@<exact-version>"
   //   - Internal peer deps with semver: ">=0.16.4" → "npm:@klinking/X@>=0.16.4"
   // External deps like @tanstack/store are NOT touched.
@@ -128,6 +129,11 @@ function main() {
 
     pkg.name = toKlinking(pkg.name)
     console.log(`\n${originalName} -> ${pkg.name}`)
+
+    if (pkg.repository?.url) {
+      pkg.repository.url = pkg.repository.url.replace('TanStack/pacer', 'dogmar/pacer')
+      console.log(`  repository.url -> ${pkg.repository.url}`)
+    }
 
     for (const depType of [
       'dependencies',
@@ -166,6 +172,7 @@ function main() {
   // ── Step 4: Publish ───────────────────────────────────────────────────
   // --access public: required for scoped packages on first publish
   // --provenance: publish with provenance attestation (requires OIDC, i.e. GitHub Actions)
+  // In CI, npm auto-detects the OIDC token for trusted publishing — no .npmrc or NPM_TOKEN needed.
   console.log('\n=== Publishing packages ===')
   const inCI = Boolean(process.env.CI)
   const publishFlags = ['--access', 'public']
@@ -179,7 +186,7 @@ function main() {
   // When --only is specified, only publish those package directories
   const publishPaths = onlyDirs
     ? packageJsonPaths.filter((p) => {
-        const dir = p.split('/').at(-2)
+        const dir = basename(dirname(p))
         return onlyDirs.has(dir)
       })
     : packageJsonPaths
