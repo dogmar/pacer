@@ -204,10 +204,20 @@ function main() {
     const pkgDir = dirname(pkgPath)
     console.log(`\nPublishing ${pkg.name}@${pkg.version}...`)
     try {
-      run(`npm publish ${publishFlags.join(' ')}`, { cwd: pkgDir })
+      const output = execSync(`npm publish ${publishFlags.join(' ')}`, {
+        cwd: pkgDir,
+        stdio: 'pipe',
+        encoding: 'utf-8',
+      })
+      if (output) console.log(output)
     } catch (e) {
-      console.error(`Failed to publish ${pkg.name}: ${e.message}`)
-      failures++
+      const stderr = e.stderr || e.message
+      if (dryRun && stderr.includes('previously published versions')) {
+        console.log(`  Already published (ok for dry-run)`)
+      } else {
+        console.error(`Failed to publish ${pkg.name}:\n${stderr}`)
+        failures++
+      }
     }
   }
 
