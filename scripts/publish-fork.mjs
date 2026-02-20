@@ -198,6 +198,7 @@ function main() {
     console.log(`Filtering to: ${[...onlyDirs].join(', ')}`)
   }
 
+  let failures = 0
   for (const pkgPath of publishPaths) {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
     const pkgDir = dirname(pkgPath)
@@ -206,6 +207,7 @@ function main() {
       run(`npm publish ${publishFlags.join(' ')}`, { cwd: pkgDir })
     } catch (e) {
       console.error(`Failed to publish ${pkg.name}: ${e.message}`)
+      failures++
     }
   }
 
@@ -214,6 +216,11 @@ function main() {
   // Source code was never modified — only package.json files were touched.
   console.log('\n=== Reverting changes ===')
   run('git checkout -- packages/')
+
+  if (failures > 0) {
+    console.error(`\n${failures} package(s) failed to publish`)
+    process.exit(1)
+  }
 
   console.log('\nDone!')
 }

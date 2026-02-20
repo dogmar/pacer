@@ -1,0 +1,30 @@
+name: Publish Dry Run
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'media/**'
+      - '**/*.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish-dry-run:
+    name: Publish Dry Run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+      - name: Setup Tools
+        uses: tanstack/config/.github/setup@main
+      - name: Install npm
+        run: npm install -g npm@11
+      - name: Publish (dry-run)
+        run: node scripts/publish-fork.mjs --dry-run
